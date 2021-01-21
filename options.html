@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        body {
+            background-color: #f1f1f1;
+        }
+
+        .ts-option {
+            width: 100%;
+            padding: 12px 20px;
+            margin: 8px 0;
+            box-sizing: border-box;
+        }
+
+        .example-url {
+            font-family: monospace;
+            color: darkgray;
+            font-size: small;
+        }
+    </style>
+</head>
+<body>
+<h2>Configure Teamscale Server and SAP Username</h2>
+<div>
+    <p>Teamscale Server (note that you have to be logged in while testing)<br>
+        Please include protocol <span class="example-url">(e.g. http://teamscale.example.com</span>)</p>
+    <p><input id="ts-server" type="text" name="ts-server" class="ts-option"></p>
+
+    <p>Teamscale Project</p>
+    <p><input id="ts-project" type="text" name="ts-project" class="ts-option"></p>
+
+    <p>SAP Username (executes the test)</p>
+    <p><input id="sap-username" type="text" name="sap-username" class="ts-option"></p>
+
+    <p>Additional url filter to activate plugin on other Azure DevOps Server<br>
+        (preset are: <span class="example-url">https://*.visualstudio.com/*</span> and
+        <span class="example-url">https://dev.azure.com/*</span>)</p>
+    <p><input id="extended-uri-filter" type="text" name="extended-uri-filter" class="ts-option"></p>
+</div>
+</body>
+<script src="options.js"></script>
+</html>
