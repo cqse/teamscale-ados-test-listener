@@ -41,20 +41,7 @@ const API_CALL_UPDATE_TEST_RUN_SUFFIX = '/_api/_testresult/Update?teamId=&__v=5'
 const standardUriFilter = ["https://*.visualstudio.com/*", "https://dev.azure.com/*"];
 let currentUriFilter = [];
 
-chrome.runtime.onInstalled.addListener(() => {
-	const standardValues = {};
-	standardValues[tsServerOptionName] = 'https://teamscale.example.org/';
-	standardValues[tsProjectOptionName] = 'project';
-	standardValues[sapUserOptionName] = 'SAP_Sample_User';
-	standardValues[extendedUriFilterOptionName] = '';
-
-	allOptions.forEach(optionName => {
-		let storageObject = {};
-		storageObject[optionName] = standardValues[optionName];
-
-		chrome.storage.local.set(storageObject);
-	});
-});
+chrome.runtime.onInstalled.addListener(fetchStoredConfiguration);
 
 chrome.runtime.onMessage.addListener(
 	function (request, sender, sendResponse) {
@@ -84,7 +71,7 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
 		chrome.webRequest.onBeforeRequest.removeListener(listeners[tabId]);
 		delete listeners[tabId];
 	} else {
-		listeners[tabId] = (details) => testRunUpdateCallListener(details, tabId);
+		listeners[tabId] = (details) => testRunUpdateCallListener(details, tabId, tab);
 
 		chrome.webRequest.onBeforeRequest.addListener(listeners[tabId], {
 			urls: currentUriFilter,
@@ -105,9 +92,10 @@ chrome.tabs.onRemoved.addListener(tabId => {
 
 function registerInitialListeners(tabId) {
 	fetchStoredConfiguration();
+	cacheTeamscaleSessionCookie();
 
-	initialListeners[tabId * 2] = resolveAzureDevOpsSessionIdListener;
-	initialListeners[tabId * 2 + 1] = onStartListener;
+	initialListeners[tabId * 2] = details => resolveAzureDevOpsSessionIdListener(details, tabId);
+	initialListeners[tabId * 2 + 1] = details => onStartListener(details, tabId);
 
 	const listenerFilterOptions = {
 		urls: currentUriFilter,
@@ -119,7 +107,7 @@ function registerInitialListeners(tabId) {
 	chrome.webRequest.onBeforeRequest.addListener(initialListeners[tabId * 2 + 1], listenerFilterOptions, ["requestBody"]);
 }
 
-function resolveAzureDevOpsSessionIdListener(details) {
+function resolveAzureDevOpsSessionIdListener(details, tabId) {
 	if (!isTestRunnerApiCall(details)) {
 		return;
 	}
@@ -141,7 +129,7 @@ function resolveAzureDevOpsSessionIdListener(details) {
 	}
 }
 
-function onStartListener(details) {
+function onStartListener(details, tabId) {
 	if (!isTestRunnerApiCall(details)) {
 		return;
 	}
@@ -170,7 +158,7 @@ function onStartListener(details) {
  * This listener is attached to web requests in tabs that are assumed to belong to an Azure DevOps test runner and
  * parses needed information from update calls (regarding a test run) to Azure DevOps.
  */
-function testRunUpdateCallListener(details, tabId) {
+function testRunUpdateCallListener(details, tabId, tab) {
 	if (!details.url.endsWith(API_CALL_UPDATE_TEST_RUN_SUFFIX)) {
 		return;
 	}
@@ -385,6 +373,11 @@ function resolveUserNameOfTesterAndTriggerRecordingStart(apiUrl, tabId) {
 
 function fetchStoredConfiguration() {
 	chrome.storage.local.get(allOptions, result => {
+		if (!result[tsProjectOptionName]) {
+			setDefaultOptions();
+			return;
+		}
+
 		allOptions.forEach(optionName => {
 			configOptions[optionName] = result[optionName];
 		});
@@ -393,7 +386,6 @@ function fetchStoredConfiguration() {
 		if (configOptions[extendedUriFilterOptionName] && configOptions[extendedUriFilterOptionName].trim().length > 1) {
 			currentUriFilter.push(configOptions[extendedUriFilterOptionName]);
 		}
-		cacheTeamscaleSessionCookie();
 	});
 }
 
@@ -461,4 +453,19 @@ function isSubstepInfo(info) {
 function isTestRunnerApiCall(details) {
 	return details.url.endsWith(API_ON_PREMISE_CALL_OPEN_TEST_RUNNER) ||
 		details.url.endsWith(API_SERVICES_CALL_OPEN_TEST_RUNNER);
+}
+
+function setDefaultOptions() {
+	const standardValues = {};
+	standardValues[tsServerOptionName] = 'https://teamscale.example.org/';
+	standardValues[tsProjectOptionName] = 'project';
+	standardValues[sapUserOptionName] = 'SAP_Sample_User';
+	standardValues[extendedUriFilterOptionName] = '';
+
+	allOptions.forEach(optionName => {
+		let storageObject = {};
+		storageObject[optionName] = standardValues[optionName];
+
+		chrome.storage.local.set(storageObject);
+	});
 }
