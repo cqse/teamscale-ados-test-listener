@@ -2,8 +2,6 @@
 
 let listeners = [];
 
-const tsSapCallFinishedMsg = 'call finished';
-
 chrome.runtime.sendMessage({
 	data: {
 		request: internalRequestKinds.sendLogs
@@ -52,7 +50,7 @@ function formatServerResponse(serverResponse) {
 	text.replace(':/CQSE/MSG_TIA:000 ', '');
 
 	let labelsClasses = 'labels';
-	if (serverResponse.status !== 200) {
+	if (serverResponse.status !== httpOkStatus) {
 		labelsClasses += ' error';
 	}
 

@@ -315,7 +315,7 @@ function resolveActionCaption(action) {
 
 function resolveEventText(request) {
 	let text = request.responseText;
-	if (request.status !== 200) {
+	if (request.status !== httpOkStatus) {
 		const textParts = text.substr(text.indexOf('HTTP Status Code')).split('\n');
 		text = textParts[0] + '\r\n' + textParts[1];
 
@@ -353,7 +353,7 @@ function resolveUserNameOfTesterAndTriggerRecordingStart(apiUrl, tabId) {
 		if (request.readyState !== 4) {
 			return;
 		}
-		if (request.status === 200) {
+		if (request.status === httpOkStatus) {
 			const userInfo = JSON.parse(request.responseText);
 			userByAdosSession[adosSessionByTab[tabId]] = userInfo.identity.AccountName;
 

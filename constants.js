@@ -8,6 +8,8 @@ const allOptionIds = [tsServerOptionId, tsProjectOptionId, sapUserOptionId, exte
 
 const tsSapCallFinishedMsg = 'call finished';
 
+const httpOkStatus = 200;
+
 const internalRequestKinds = {
 	sendLogs: 'send logs',
 	getLog: 'get log',
