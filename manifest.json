@@ -4,7 +4,7 @@
   "description": "Catches events in the Azure DevOps Test Runner and forwards them to a Teamscale server.",
   "permissions": ["tabs", "webRequest", "<all_urls>", "storage", "notifications", "cookies"],
   "background": {
-    "scripts": ["background.js"],
+    "scripts": ["constants.js", "background.js"],
     "persistent": true
   },
   "icons": {

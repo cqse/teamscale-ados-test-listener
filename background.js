@@ -1,21 +1,23 @@
 'use strict';
 
-/* Enabled listeners that catch start of test run and Azure DevOps session that belongs to test run. */
-let initialListeners = [];
+/* Enabled listeners that resolve Azure DevOps session that belongs to test run. */
+let adosSessionIdResolvingListener = [];
+/* Enabled listeners that catch start of test run. */
+let onTestStartListeners = [];
 /* Enabled listeners that catch update events of a test run. */
 let listeners = [];
 
 /* Map Chrome Tab Id to: URL of Test Run in Azure DevOps, subject to be displayed in Teamscale's Test Run View. */
-let tabToAdosTestRunUrlMap = {};
+let adosTestRunUrlByTab = {};
 /* Map Chrome Tab Id to: Test Case Id (not Test Run) as identified in Azure DevOps. */
-let tabToTestCaseMap = {};
+let testCaseIdByTab = {};
 /* Map Test Case Id to: Parameters of the currently executed test run. Parameters are only sent on first update. */
-let testParametersMap = {};
+let testParametersByTestCaseId = {};
 
 /* Map Chrome Tab Id to: Azure DevOps Session. This information currently unused. */
-let tabToSessionMap = {};
+let adosSessionByTab = {};
 /* Map Azure DevOps Session to: Azure DevOps User. This information is currently unused. */
-let sessionToUserMap = {};
+let userByAdosSession = {};
 
 /* Options of the extension. Loaded once from the Chrome Storage. */
 let configOptions = {};
@@ -26,35 +28,27 @@ let teamscaleSession;
 /* Storage of all generated log messages (i.e. Test Events and Report Status Log Message from Teamscale. */
 let logMessages = [];
 
-const tsSapCallFinishedMsg = 'call finished';
-
-const tsServerOptionName = 'ts-server';
-const tsProjectOptionName = 'ts-project';
-const sapUserOptionName = 'sap-username';
-const extendedUriFilterOptionName = 'extended-uri-filter';
-const allOptions = [tsServerOptionName, tsProjectOptionName, sapUserOptionName, extendedUriFilterOptionName];
-
 const API_ON_PREMISE_CALL_OPEN_TEST_RUNNER = '/_api/_wit/pageWorkItems?__v=5';
 const API_SERVICES_CALL_OPEN_TEST_RUNNER = '/_apis/Contribution/dataProviders/query';
 const API_CALL_UPDATE_TEST_RUN_SUFFIX = '/_api/_testresult/Update?teamId=&__v=5';
 
-const standardUriFilter = ["https://*.visualstudio.com/*", "https://dev.azure.com/*"];
+const standardUriFilter = ['https://*.visualstudio.com/*', 'https://dev.azure.com/*'];
 let currentUriFilter = [];
 
 chrome.runtime.onInstalled.addListener(fetchStoredConfiguration);
 
 chrome.runtime.onMessage.addListener(
 	function (request, sender, sendResponse) {
-		if (request.data.request === 'send logs') {
+		if (request.data.request === internalRequestKinds.sendLogs) {
 			sendLogMessagesToPopup();
 		}
 
-		if (request.data.request === 'reset user') {
-			queryTeamscale('reset');
+		if (request.data.request === internalRequestKinds.resetUser) {
+			queryTeamscale(tsTiaApiActions.reset);
 		}
 
-		if (request.data.request === 'get log') {
-			queryTeamscale('log', null, null, null, request.data.sapTestKey);
+		if (request.data.request === internalRequestKinds.getLog) {
+			queryTeamscale(tsTiaApiActions.log, null, null, null, request.data.sapTestKey);
 		}
 	}
 );
@@ -71,7 +65,7 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
 		chrome.webRequest.onBeforeRequest.removeListener(listeners[tabId]);
 		delete listeners[tabId];
 	} else {
-		listeners[tabId] = (details) => testRunUpdateCallListener(details, tabId, tab);
+		listeners[tabId] = details => testRunUpdateCallListener(details, tabId, tab);
 
 		chrome.webRequest.onBeforeRequest.addListener(listeners[tabId], {
 			urls: currentUriFilter,
@@ -86,7 +80,7 @@ chrome.tabs.onRemoved.addListener(tabId => {
 	if (listeners[tabId]) {
 		chrome.webRequest.onBeforeRequest.removeListener(listeners[tabId]);
 		delete listeners[tabId];
-		queryTeamscale('stop', tabId);
+		queryTeamscale(tsTiaApiActions.stop, tabId);
 	}
 });
 
@@ -94,8 +88,8 @@ function registerInitialListeners(tabId) {
 	fetchStoredConfiguration();
 	cacheTeamscaleSessionCookie();
 
-	initialListeners[tabId * 2] = details => resolveAzureDevOpsSessionIdListener(details, tabId);
-	initialListeners[tabId * 2 + 1] = details => onStartListener(details, tabId);
+	adosSessionIdResolvingListener[tabId] = details => resolveAzureDevOpsSessionIdListener(details, tabId);
+	onTestStartListeners[tabId] = details => onStartListener(details, tabId);
 
 	const listenerFilterOptions = {
 		urls: currentUriFilter,
@@ -103,8 +97,8 @@ function registerInitialListeners(tabId) {
 		tabId: tabId
 	};
 
-	chrome.webRequest.onBeforeSendHeaders.addListener(initialListeners[tabId * 2], listenerFilterOptions, ["requestHeaders", "extraHeaders"]);
-	chrome.webRequest.onBeforeRequest.addListener(initialListeners[tabId * 2 + 1], listenerFilterOptions, ["requestBody"]);
+	chrome.webRequest.onBeforeSendHeaders.addListener(adosSessionIdResolvingListener[tabId], listenerFilterOptions, ["requestHeaders", "extraHeaders"]);
+	chrome.webRequest.onBeforeRequest.addListener(onTestStartListeners[tabId], listenerFilterOptions, ["requestBody"]);
 }
 
 function resolveAzureDevOpsSessionIdListener(details, tabId) {
@@ -119,12 +113,12 @@ function resolveAzureDevOpsSessionIdListener(details, tabId) {
 			continue;
 		}
 
-		tabToSessionMap[tabId] = headers[i].value;
+		adosSessionByTab[tabId] = headers[i].value;
 	}
 
 	// self delete this listener
-	chrome.webRequest.onBeforeSendHeaders.removeListener(initialListeners[tabId * 2]);
-	if (!tabToSessionMap[tabId]) {
+	chrome.webRequest.onBeforeSendHeaders.removeListener(adosSessionIdResolvingListener[tabId]);
+	if (!adosSessionByTab[tabId]) {
 		throw 'Could not obtain Azure DevOps Session ID.';
 	}
 }
@@ -135,23 +129,24 @@ function onStartListener(details, tabId) {
 	}
 
 	let workItemId;
-	let apiCallUserInfoUri;
+	let caughtCall;
+	const parsedRequest = JSON.parse(String.fromCharCode.apply(null, new Uint8Array(details.requestBody.raw[0].bytes)));
+
 	if (details.url.endsWith(API_ON_PREMISE_CALL_OPEN_TEST_RUNNER)) {
-		workItemId = JSON.parse(String.fromCharCode.apply(null, new Uint8Array(details.requestBody.raw[0].bytes))).workItemIds;
-		apiCallUserInfoUri = details.url.substring(0, details.url.length - API_ON_PREMISE_CALL_OPEN_TEST_RUNNER.length) +
-			'/_api/_common/GetUserProfile?__v=5';
+		workItemId = parsedRequest.workItemIds;
+		caughtCall = API_ON_PREMISE_CALL_OPEN_TEST_RUNNER;
 	} else {
-		workItemId = JSON.parse(String.fromCharCode.apply(null, new Uint8Array(details.requestBody.raw[0].bytes))).context.properties.workItemIds;
-		apiCallUserInfoUri = details.url.substring(0, details.url.length - API_SERVICES_CALL_OPEN_TEST_RUNNER.length) +
-			'/_api/_common/GetUserProfile?__v=5';
+		workItemId = parsedRequest.context.properties.workItemIds;
+		caughtCall = API_SERVICES_CALL_OPEN_TEST_RUNNER;
 	}
 
-	tabToTestCaseMap[tabId] = workItemId;
+	testCaseIdByTab[tabId] = workItemId;
 
+	const apiCallUserInfoUri = details.url.substring(0, details.url.length - caughtCall.length) + '/_api/_common/GetUserProfile?__v=5';
 	resolveUserNameOfTesterAndTriggerRecordingStart(apiCallUserInfoUri, tabId);
 
 	// self delete this listener
-	chrome.webRequest.onBeforeRequest.removeListener(initialListeners[tabId * 2 + 1]);
+	chrome.webRequest.onBeforeRequest.removeListener(onTestStartListeners[tabId]);
 }
 
 /**
@@ -170,22 +165,21 @@ function testRunUpdateCallListener(details, tabId, tab) {
 	const updatedIterationActionResult = getUpdatedIterationActionResult(updateRequest);
 	const testRunId = updateRequest.testRunId;
 
-	tabToAdosTestRunUrlMap[tabId] = tab.url.substring(0, tab.url.indexOf('/_testExecution/')) +
+	adosTestRunUrlByTab[tabId] = tab.url.substring(0, tab.url.indexOf('/_testExecution/')) +
 		'/_testManagement/runs?runId=' + testRunId + '&_a=runCharts';
 
-	if (!testParametersMap[testCaseId]) {
-		testParametersMap[testCaseId] = getParameterDefinitionsPerIteration(updateRequest);
+	if (!testParametersByTestCaseId[testCaseId]) {
+		testParametersByTestCaseId[testCaseId] = getParameterDefinitionsPerIteration(updateRequest);
 	}
 
 	const testNameWithParameter = updateRequest.testCaseResult.testCaseTitle.trim();
 
+	let action = tsTiaApiActions.update;
 	if (updatedIterationActionResult.outcome === 12) { // test is paused, other call to Teamscale needed
-		queryTeamscale('pause', details.tabId, testNameWithParameter,
-			testOutcomeToTeamscaleTestExecutionResult(updatedIterationActionResult.outcome));
-	} else {
-		queryTeamscale('update', details.tabId, testNameWithParameter,
-			testOutcomeToTeamscaleTestExecutionResult(updatedIterationActionResult.outcome));
+		action = tsTiaApiActions.pause;
 	}
+
+	queryTeamscale(action, details.tabId, testNameWithParameter, testOutcomeToTeamscaleTestExecutionResult(updatedIterationActionResult.outcome));
 }
 
 /**
@@ -232,20 +226,20 @@ function getParameterDefinitionsPerIteration(updateRequest) {
 }
 
 function queryTeamscale(action, tabId, extendedName, status, sapTestKey) {
-	if (action !== 'reset' && action !== 'log' && (!tabId || !tabToTestCaseMap[tabId])) {
+	if (action !== tsTiaApiActions.reset && action !== tsTiaApiActions.log && (!tabId || !testCaseIdByTab[tabId])) {
 		throw 'Could not obtain testId from tabId "' + tabId + '".';
 	}
 
-	if (!configOptions[tsServerOptionName] || !configOptions[tsProjectOptionName] || !configOptions[sapUserOptionName]) {
+	if (!configOptions[tsServerOptionId] || !configOptions[tsProjectOptionId] || !configOptions[sapUserOptionId]) {
 		throw 'Not all extension configuration entries are set. (' +
-		tsServerOptionName + '=' + configOptions[tsServerOptionName] + ', ' +
-		tsProjectOptionName + '=' + configOptions[tsProjectOptionName] + ', ' +
-		sapUserOptionName + '=' + configOptions[sapUserOptionName] + ')';
+		tsServerOptionId + '=' + configOptions[tsServerOptionId] + ', ' +
+		tsProjectOptionId + '=' + configOptions[tsProjectOptionId] + ', ' +
+		sapUserOptionId + '=' + configOptions[sapUserOptionId] + ')';
 	}
 
-	const testId = tabToTestCaseMap[tabId];
+	const testId = testCaseIdByTab[tabId];
 
-	if (action === 'update' && (!extendedName || !status)) {
+	if (action === tsTiaApiActions.update && (!extendedName || !status)) {
 		throw 'Need test name and status for updating Test Run.';
 	}
 
@@ -260,25 +254,25 @@ function constructTeamscaleRequest(action, status, extendedName, tabId, sapTestK
 	const request = new XMLHttpRequest();
 
 	let additionalParameter = '';
-	if (action === 'update') {
+	if (action === tsTiaApiActions.update) {
 		additionalParameter = '&result=' + status + "&extended-name=" + encodeURI(extendedName);
 	}
 
-	const teamscaleUrl = assertStringEndsWith(configOptions[tsServerOptionName], '/');
+	const teamscaleUrl = assertStringEndsWith(configOptions[tsServerOptionId], '/');
 
-	const testOutput = 'Follow this link to view test run in Azure DevOps:\n' + tabToAdosTestRunUrlMap[tabId];
+	const testOutput = 'Follow this link to view test run in Azure DevOps:\n' + adosTestRunUrlByTab[tabId];
 
 	let url;
 	let httpVerb = 'POST';
-	const serviceUrl = teamscaleUrl + 'api/projects/' + configOptions[tsProjectOptionName] + '/sap-test-event/';
+	const serviceUrl = teamscaleUrl + 'api/projects/' + configOptions[tsProjectOptionId] + '/sap-test-event/';
 
-	if (action === 'reset') {
-		url = serviceUrl + action + '/' + encodeURIComponent(configOptions[sapUserOptionName]);
-	} else if (action === 'log') {
+	if (action === tsTiaApiActions.reset) {
+		url = serviceUrl + action + '/' + encodeURIComponent(configOptions[sapUserOptionId]);
+	} else if (action === tsTiaApiActions.log) {
 		httpVerb = 'GET';
 		url = serviceUrl + action + '/' + encodeURIComponent(sapTestKey);
 	} else {
-		url = serviceUrl + action + '?test-id=' + testId + '&message=' + encodeURIComponent(testOutput) + '&sap-user-name=' + encodeURIComponent(configOptions[sapUserOptionName]) + additionalParameter;
+		url = serviceUrl + action + '?test-id=' + testId + '&message=' + encodeURIComponent(testOutput) + '&sap-user-name=' + encodeURIComponent(configOptions[sapUserOptionId]) + additionalParameter;
 	}
 
 	request.open(httpVerb, url, true);
@@ -304,15 +298,15 @@ function handleTeamscaleResponse(request, action) {
 
 function resolveActionCaption(action) {
 	switch (action) {
-		case 'start':
+		case tsTiaApiActions.start:
 			return '▶️ Start Test';
-		case 'stop':
+		case tsTiaApiActions.stop:
 			return '⏹️ End Test';
-		case 'update':
+		case tsTiaApiActions.update:
 			return '🗞️ Update Metadata';
-		case 'log':
+		case tsTiaApiActions.log:
 			return '🗞️ Log';
-		case 'reset':
+		case tsTiaApiActions.reset:
 			return '🔄 Reset Recording State';
 		default:
 			return 'Test Event';
@@ -330,8 +324,7 @@ function resolveEventText(request) {
 		}
 	}
 
-	text = text.replace(/ : .:\/CQSE\/MSG_TIA:000/gm, ':');
-	return text;
+	return text.replace(/ : .:\/CQSE\/MSG_TIA:000/gm, ':');
 }
 
 function persistAndBroadcastSingleEvent(event) {
@@ -354,37 +347,39 @@ function persistAndBroadcastSingleEvent(event) {
 
 function resolveUserNameOfTesterAndTriggerRecordingStart(apiUrl, tabId) {
 	const request = new XMLHttpRequest();
-	request.open("GET", apiUrl, true);
+	request.open('GET', apiUrl, true);
 	request.onreadystatechange = () => {
+		// readyState==4 => DONE; see https://developer.mozilla.org/en-US/docs/Web/API/XMLHttpRequest/readyState
 		if (request.readyState !== 4) {
 			return;
 		}
 		if (request.status === 200) {
 			const userInfo = JSON.parse(request.responseText);
-			sessionToUserMap[tabToSessionMap[tabId]] = userInfo.identity.AccountName;
+			userByAdosSession[adosSessionByTab[tabId]] = userInfo.identity.AccountName;
 
-			queryTeamscale('start', tabId);
+			queryTeamscale(tsTiaApiActions.start, tabId);
 		} else {
 			throw 'Could not obtain username.';
 		}
-	}
+	};
 	request.send();
 }
 
 function fetchStoredConfiguration() {
-	chrome.storage.local.get(allOptions, result => {
-		if (!result[tsProjectOptionName]) {
+	chrome.storage.local.get(allOptionIds, result => {
+		if (!result[tsProjectOptionId]) {
 			setDefaultOptions();
 			return;
 		}
 
-		allOptions.forEach(optionName => {
-			configOptions[optionName] = result[optionName];
+		allOptionIds.forEach(optionId => {
+			configOptions[optionId] = result[optionId];
 		});
 
 		currentUriFilter = standardUriFilter;
-		if (configOptions[extendedUriFilterOptionName] && configOptions[extendedUriFilterOptionName].trim().length > 1) {
-			currentUriFilter.push(configOptions[extendedUriFilterOptionName]);
+		const extendedUriFilterSetting = configOptions[extendedUriFilterOptionId];
+		if (extendedUriFilterSetting && extendedUriFilterSetting.trim().length > 1) {
+			currentUriFilter.push(extendedUriFilterSetting);
 		}
 	});
 }
@@ -398,7 +393,7 @@ function assertStringEndsWith(text, suffix) {
 }
 
 function cacheTeamscaleSessionCookie() {
-	const teamscaleServer = new URL(configOptions[tsServerOptionName]);
+	const teamscaleServer = new URL(configOptions[tsServerOptionId]);
 	const setTeamscaleSessionCallback = function (cookieArray) {
 		for (const cookie of cookieArray) {
 			if (!(cookie.name.includes('teamscale-session') && cookie.name.includes('-' + teamscaleServer.port))) {
@@ -457,14 +452,14 @@ function isTestRunnerApiCall(details) {
 
 function setDefaultOptions() {
 	const standardValues = {};
-	standardValues[tsServerOptionName] = 'https://teamscale.example.org/';
-	standardValues[tsProjectOptionName] = 'project';
-	standardValues[sapUserOptionName] = 'SAP_Sample_User';
-	standardValues[extendedUriFilterOptionName] = '';
+	standardValues[tsServerOptionId] = 'https://teamscale.example.org/';
+	standardValues[tsProjectOptionId] = 'project';
+	standardValues[sapUserOptionId] = 'SAP_Sample_User';
+	standardValues[extendedUriFilterOptionId] = '';
 
-	allOptions.forEach(optionName => {
+	allOptionIds.forEach(optionIds => {
 		let storageObject = {};
-		storageObject[optionName] = standardValues[optionName];
+		storageObject[optionIds] = standardValues[optionIds];
 
 		chrome.storage.local.set(storageObject);
 	});

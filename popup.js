@@ -6,21 +6,19 @@ const tsSapCallFinishedMsg = 'call finished';
 
 chrome.runtime.sendMessage({
 	data: {
-		request: 'send logs'
+		request: internalRequestKinds.sendLogs
 	}
 });
 
 chrome.runtime.onMessage.addListener(
 	function (request, sender, sendResponse) {
 		if (request.msg === tsSapCallFinishedMsg) {
-			const messagesElement = 'messages';
-			document.getElementById(messagesElement).innerHTML = formatServerResponse(request.data.serverResponse) +
-				document.getElementById(messagesElement).innerHTML;
+			const messagesElement = document.getElementById('messages');
+			messagesElement.innerHTML = formatServerResponse(request.data.serverResponse) + messagesElement.innerHTML;
 			const date = request.data.serverResponse.date;
 
 			retainOnlyNewestOfSubsequentLogEntries(messagesElement);
-			initializeResetLink(date);
-			initializeLogLink(date);
+			initializeLinkListeners(date);
 			makeObjectInspectionCollapsible(date);
 			listeners.forEach(listenerEntry => {
 				document.getElementById(listenerEntry.elementId).addEventListener('click', listenerEntry.listener);
@@ -33,11 +31,11 @@ function formatServerResponse(serverResponse) {
 	let textParts = serverResponse.text.split('ManualSapTestInfo');
 	let text = textParts[0];
 	if (textParts.length > 1) {
-		text = textParts[0] +
-			'<div id="' + serverResponse.date + '-teaser">ManualSapTestInfo [<span style="color: darkgray">click to' +
-			' inspect</span>]</div>' +
+		text += '<div id="' + serverResponse.date + '-teaser">ManualSapTestInfo [<span style="color: darkgray">click' +
+			' to inspect</span>]</div>'+
 			'<div id="' + serverResponse.date + '-info" style="display: none">' +
-			'ManualSapTestInfo' + textParts[1].replace('[', '[<br>&nbsp;&nbsp;&nbsp;').replace(/, /g, '<br>&nbsp;&nbsp;&nbsp;') + '</div>';
+			'ManualSapTestInfo' + textParts[1].replace('[', '[<br>&nbsp;&nbsp;&nbsp;').replace(/, /g, '<br>&nbsp;&nbsp;&nbsp;') +
+			'</div>';
 	}
 
 	text = text.replace(/(?:\r\n|\r|\n)/g, '<br>');
@@ -63,43 +61,27 @@ function formatServerResponse(serverResponse) {
 		" right'>" + serverResponse.date + "</div></div><p class='message'>" + text + "</p>";
 }
 
-function initializeLogLink(date) {
-	const logLink = document.getElementById(date + '-log');
-	if (!logLink) {
-		return;
+function initializeLinkListeners(date) {
+	if (document.getElementById(date + '-log')) {
+		listeners.push(constructSimpleRequestSendingListener(logLink, {
+			request: internalRequestKinds.getLog,
+			sapTestKey: logLink.getAttribute('data-test-key')
+		}));
 	}
 
-	const listener = {
-		elementId: logLink.id, listener: () => {
-			chrome.runtime.sendMessage({
-				data: {
-					request: 'get log',
-					sapTestKey: logLink.getAttribute('data-test-key')
-				}
-			});
-		}
-	};
-	listeners.push(listener);
-
+	if (document.getElementById(date + '-reset')) {
+		listeners.push(constructSimpleRequestSendingListener(resetLink, {request: internalRequestKinds.resetUser}));
+	}
 }
 
-function initializeResetLink(date) {
-	const resetLink = document.getElementById(date + '-reset');
-	if (!resetLink) {
-		return;
-	}
-
-	const listener = {
-		elementId: resetLink.id, listener: () => {
+function constructSimpleRequestSendingListener(link, requestData) {
+	return {
+		elementId: link.id, listener: () => {
 			chrome.runtime.sendMessage({
-				data: {
-					request: 'reset user'
-				}
+				data: requestData
 			});
 		}
 	};
-	listeners.push(listener);
-
 }
 
 function makeObjectInspectionCollapsible(date) {
@@ -127,11 +109,16 @@ function triggerMoreInfo(elementIdPrefix) {
 }
 
 function retainOnlyNewestOfSubsequentLogEntries(messagesElement) {
-	const messagesChildren = document.getElementById(messagesElement).children;
+	const messagesChildren = messagesElement.children;
+	// each message renders to two elements (<div> + <p>); only remove superfluous logs starting from 2 messages
 	if (messagesChildren.length >= 4) {
-		if (messagesChildren[0].innerHTML.includes('Log</') && messagesChildren[2].innerHTML.includes('Log</')) {
-			document.getElementById(messagesElement).removeChild(messagesChildren[3]);
-			document.getElementById(messagesElement).removeChild(messagesChildren[2]);
+		if (isReportLogEntry(messagesChildren[0]) && isReportLogEntry(messagesChildren[2])) {
+			messagesElement.removeChild(messagesChildren[3]);
+			messagesElement.removeChild(messagesChildren[2]);
 		}
 	}
+}
+
+function isReportLogEntry(element) {
+	return element.innerHTML.includes('Log</');
 }

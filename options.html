@@ -24,7 +24,7 @@
 <h2>Configure Teamscale Server and SAP Username</h2>
 <div>
     <p>Teamscale Server (note that you have to be logged in while testing)<br>
-        Please include protocol <span class="example-url">(e.g. http://teamscale.example.com</span>)</p>
+        Please include the protocol (<span class="example-url">e.g. http://teamscale.example.com</span>)</p>
     <p><input id="ts-server" type="text" name="ts-server" class="ts-option"></p>
 
     <p>Teamscale Project</p>
@@ -33,11 +33,12 @@
     <p>SAP Username (executes the test)</p>
     <p><input id="sap-username" type="text" name="sap-username" class="ts-option"></p>
 
-    <p>Additional url filter to activate plugin on other Azure DevOps Server<br>
-        (preset are: <span class="example-url">https://*.visualstudio.com/*</span> and
+    <p>Additional URL filter to activate the plugin on a self-hosted instance of Azure DevOps Server<br>
+        (preset filters: <span class="example-url">https://*.visualstudio.com/*</span> and
         <span class="example-url">https://dev.azure.com/*</span>)</p>
     <p><input id="extended-uri-filter" type="text" name="extended-uri-filter" class="ts-option"></p>
 </div>
 </body>
+<script src="constants.js"></script>
 <script src="options.js"></script>
 </html>

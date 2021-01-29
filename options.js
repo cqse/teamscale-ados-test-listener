@@ -1,16 +1,10 @@
 'use strict';
 
-const tsServerOptionName = 'ts-server';
-const tsProjectOptionName = 'ts-project';
-const sapUserOptionName = 'sap-username';
-const extendedUriFilterOptionName = 'extended-uri-filter';
-const allOptions = [tsServerOptionName, tsProjectOptionName, sapUserOptionName, extendedUriFilterOptionName];
-
 function loadDataAndListen() {
-    chrome.storage.local.get(allOptions, result => {
-        allOptions.forEach(optionName => {
-            const optionInput = document.getElementById(optionName);
-            optionInput.value = result[optionName];
+    chrome.storage.local.get(allOptionIds, result => {
+        allOptionIds.forEach(optionId => {
+            const optionInput = document.getElementById(optionId);
+            optionInput.value = result[optionId];
             optionInput.addEventListener('input', saveChanges);
         });
     });
