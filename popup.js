@@ -60,14 +60,16 @@ function formatServerResponse(serverResponse) {
 }
 
 function initializeLinkListeners(date) {
-	if (document.getElementById(date + '-log')) {
+	const logLink = document.getElementById(date + '-log');
+	if (logLink) {
 		listeners.push(constructSimpleRequestSendingListener(logLink, {
 			request: internalRequestKinds.getLog,
 			sapTestKey: logLink.getAttribute('data-test-key')
 		}));
 	}
 
-	if (document.getElementById(date + '-reset')) {
+	const resetLink = document.getElementById(date + '-reset');
+	if (resetLink) {
 		listeners.push(constructSimpleRequestSendingListener(resetLink, {request: internalRequestKinds.resetUser}));
 	}
 }
