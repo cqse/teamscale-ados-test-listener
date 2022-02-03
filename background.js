@@ -403,7 +403,7 @@ function cacheTeamscaleSessionCookie() {
 					if (!(cookie.name.includes('-' + teamscaleServer.port))) {
 						continue;
 					}
-				} else if (!teamscaleServer.pathname.includes(cookie.path.replace("/",""))){
+				} else if (!teamscaleServer.pathname.replace(/\/$/,"").endsWith(cookie.path.replace(/^\/|\/$/,""))){
 					continue;
 				}
 			}
