@@ -396,8 +396,29 @@ function cacheTeamscaleSessionCookie() {
 	const teamscaleServer = new URL(configOptions[tsServerOptionId]);
 	const setTeamscaleSessionCallback = function (cookieArray) {
 		for (const cookie of cookieArray) {
-			if (!(cookie.name.includes('teamscale-session') && cookie.name.includes('-' + teamscaleServer.port))) {
+
+			if (!(cookie.name.includes('teamscale-session'))){
 				continue;
+			} else {
+				if(teamscaleServer.port){
+					if (!(cookie.name.includes('-' + teamscaleServer.port))) {
+						continue;
+					}
+				} else {
+					var correspondingPort = 0;
+					if(teamscaleServer.pathname.includes('tga')){
+						// By convention, the first digit of the port is 8 for TGA instances
+						correspondingPort = "8";
+					} else if(teamscaleServer.pathname.includes('tqe')){
+						// By convention, the first digit of the port is 7 for TQE instances
+						correspondingPort = "7";
+					}
+				
+					const cookieSessionPort = cookie.name.substring('teamscale-session-'.length , 'teamscale-session-'.length  + 4);
+					if (!(cookieSessionPort[0] === correspondingPort)){
+						continue;
+					}
+				}
 			}
 
 			teamscaleSession = cookie.name + '=' + cookie.value;
