@@ -24,15 +24,28 @@
 <h2>Configure Teamscale Server and SAP Username</h2>
 <div>
     <p>Teamscale Server (note that you have to be logged in while testing)<br>
-        Please include the protocol (<span class="example-url">e.g. http://teamscale.example.com</span>)</p>
+        Please include the protocol (<span class="example-url">e.g., http://teamscale.example.com</span>)</p>
     <p><input id="ts-server" type="text" name="ts-server" class="ts-option"></p>
 
     <p>Teamscale Project</p>
     <p><input id="ts-project" type="text" name="ts-project" class="ts-option"></p>
 
-    <p>SAP Username (executes the test)</p>
-    <p><input id="sap-username" type="text" name="sap-username" class="ts-option"></p>
+    <label for="technology">Profiled Technology:</label>
+    <select name="Profiled Technology" id="technology" class="ts-option" onchange = "showTechnologyOptions()">
+        <option value="dotnet">.NET</option>
+        <option value="sap">SAP</option>
+    </select>
 
+    <div id="sap-input" hidden>
+        <p>SAP Username (executes the test)</p>
+        <p><input id="sap-username" type="text" name="sap-username" class="ts-option"></p>
+    </div>
+    
+    <div id="dotnet-input" hidden>
+        <p>.NET Profiler socket (URI:PORT)</p>
+        <p><input id="dotnet-socket" type="text" name="dotnet-socket" class="ts-option"></p>    
+    </div>
+    
     <p>Additional URL filter to activate the plugin on a self-hosted instance of Azure DevOps Server<br>
         (preset filters: <span class="example-url">https://*.visualstudio.com/*</span> and
         <span class="example-url">https://dev.azure.com/*</span>)</p>
