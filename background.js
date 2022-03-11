@@ -230,11 +230,22 @@ function queryTeamscale(action, tabId, extendedName, status, sapTestKey) {
 		throw 'Could not obtain testId from tabId "' + tabId + '".';
 	}
 
-	if (!configOptions[tsServerOptionId] || !configOptions[tsProjectOptionId] || !configOptions[sapUserOptionId]) {
-		throw 'Not all extension configuration entries are set. (' +
-		tsServerOptionId + '=' + configOptions[tsServerOptionId] + ', ' +
-		tsProjectOptionId + '=' + configOptions[tsProjectOptionId] + ', ' +
-		sapUserOptionId + '=' + configOptions[sapUserOptionId] + ')';
+	if(configOptions[technologyId] === technologies.dotnet ){
+		if (!configOptions[tsServerOptionId] || !configOptions[tsProjectOptionId] || !configOptions[dotnetSocketId]) {
+			throw 'Not all extension configuration entries are set. (' +
+			tsServerOptionId + '=' + configOptions[tsServerOptionId] + ', ' +
+			tsProjectOptionId + '=' + configOptions[tsProjectOptionId] + ', ' +
+			dotnetSocketId + '=' + configOptions[dotnetSocketId] + ')';
+		}
+	} else if (configOptions[technologyId] === technologies.sap ){
+		if (!configOptions[tsServerOptionId] || !configOptions[tsProjectOptionId] || !configOptions[sapUserOptionId]) {
+			throw 'Not all extension configuration entries are set. (' +
+			tsServerOptionId + '=' + configOptions[tsServerOptionId] + ', ' +
+			tsProjectOptionId + '=' + configOptions[tsProjectOptionId] + ', ' +
+			sapUserOptionId + '=' + configOptions[sapUserOptionId] + ')';
+		}
+	} else {
+		throw 'Configured technology invalid. (' + technologyId + '=' + configOptions[technologyId] + ')';
 	}
 
 	const testId = testCaseIdByTab[tabId];
@@ -264,16 +275,37 @@ function constructTeamscaleRequest(action, status, extendedName, tabId, sapTestK
 
 	let url;
 	let httpVerb = 'POST';
+	// TODO Will the service be renamed to something like "manual-test-event"?
 	const serviceUrl = teamscaleUrl + 'api/projects/' + configOptions[tsProjectOptionId] + '/sap-test-event/';
 
-	if (action === tsTiaApiActions.reset) {
-		url = serviceUrl + action + '/' + encodeURIComponent(configOptions[sapUserOptionId]);
-	} else if (action === tsTiaApiActions.log) {
-		httpVerb = 'GET';
-		url = serviceUrl + action + '/' + encodeURIComponent(sapTestKey);
+	if(configOptions[technologyId] === technologies.dotnet ){
+		// .NET
+		if (action === tsTiaApiActions.reset) {
+			// TODO check API format
+			url = serviceUrl + action + '/' + encodeURIComponent(configOptions[dotnetSocketId]);
+		} else if (action === tsTiaApiActions.log) {
+			// TODO Will we have some kind of log mechanism for .NET?
+			httpVerb = 'GET';
+			// TODO check API format
+			url = serviceUrl + action + '/' + encodeURIComponent(sapTestKey);
+		} else {
+			// TODO check API format
+			url = serviceUrl + action + '?test-id=' + testId + '&message=' + encodeURIComponent(testOutput) + '&dotnet-socket-id=' + encodeURIComponent(configOptions[dotnetSocketId]) + additionalParameter;
+		}
+	} else if (configOptions[technologyId] === technologies.sap ){
+		if (action === tsTiaApiActions.reset) {
+			url = serviceUrl + action + '/' + encodeURIComponent(configOptions[sapUserOptionId]);
+		} else if (action === tsTiaApiActions.log) {
+			httpVerb = 'GET';
+			url = serviceUrl + action + '/' + encodeURIComponent(sapTestKey);
+		} else {
+			url = serviceUrl + action + '?test-id=' + testId + '&message=' + encodeURIComponent(testOutput) + '&sap-user-name=' + encodeURIComponent(configOptions[sapUserOptionId]) + additionalParameter;
+		}
 	} else {
-		url = serviceUrl + action + '?test-id=' + testId + '&message=' + encodeURIComponent(testOutput) + '&sap-user-name=' + encodeURIComponent(configOptions[sapUserOptionId]) + additionalParameter;
+		throw 'Configured technology invalid. (' + technologyId + '=' + configOptions[technologyId] + ')'; 
 	}
+
+	
 
 	request.open(httpVerb, url, true);
 	return request;
@@ -462,7 +494,9 @@ function setDefaultOptions() {
 	const standardValues = {};
 	standardValues[tsServerOptionId] = 'https://teamscale.example.org/';
 	standardValues[tsProjectOptionId] = 'project';
+	standardValues[technology] = technologies.dotnet;
 	standardValues[sapUserOptionId] = 'SAP_Sample_User';
+	standardValues[dotnetSocketId] = '192.168.0.1:5555';
 	standardValues[extendedUriFilterOptionId] = '';
 
 	allOptionIds.forEach(optionIds => {
