@@ -53,13 +53,13 @@ chrome.runtime.onMessage.addListener(
 	}
 );
 
-chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
 	if (!changeInfo.status || changeInfo.status !== 'complete' ||
 		!(tab.title.startsWith('Runner') && tab.title.endsWith('Test Plans'))) {
 		return;
 	}
 
-	registerInitialListeners(tabId);
+	await registerInitialListeners(tabId);
 
 	if (listeners[tabId]) {
 		chrome.webRequest.onBeforeRequest.removeListener(listeners[tabId]);
@@ -84,8 +84,8 @@ chrome.tabs.onRemoved.addListener(tabId => {
 	}
 });
 
-function registerInitialListeners(tabId) {
-	fetchStoredConfiguration();
+async function registerInitialListeners(tabId) {
+	await fetchStoredConfiguration();
 	cacheTeamscaleSessionCookie();
 
 	adosSessionIdResolvingListener[tabId] = details => resolveAzureDevOpsSessionIdListener(details, tabId);
@@ -365,23 +365,26 @@ function resolveUserNameOfTesterAndTriggerRecordingStart(apiUrl, tabId) {
 	request.send();
 }
 
-function fetchStoredConfiguration() {
-	chrome.storage.local.get(allOptionIds, result => {
-		if (!result[tsProjectOptionId]) {
-			setDefaultOptions();
-			return;
-		}
-
-		allOptionIds.forEach(optionId => {
-			configOptions[optionId] = result[optionId];
+async function fetchAllOptions() {
+	return new Promise((resolve, reject) => {
+		chrome.storage.local.get(allOptionIds, function (result) {
+			if (Object.keys(result).length === 0) {
+				resolve(setDefaultOptions());
+			} else {
+				resolve(result);
+			}
 		});
-
-		currentUriFilter = standardUriFilter;
-		const extendedUriFilterSetting = configOptions[extendedUriFilterOptionId];
-		if (extendedUriFilterSetting && extendedUriFilterSetting.trim().length > 1) {
-			currentUriFilter.push(extendedUriFilterSetting);
-		}
 	});
+}
+
+async function fetchStoredConfiguration() {
+	configOptions = await fetchAllOptions();
+
+	currentUriFilter = standardUriFilter;
+	const extendedUriFilterSetting = configOptions[extendedUriFilterOptionId];
+	if (extendedUriFilterSetting && extendedUriFilterSetting.trim().length > 1) {
+		currentUriFilter.push(extendedUriFilterSetting);
+	}
 }
 
 function assertStringEndsWith(text, suffix) {
@@ -471,4 +474,6 @@ function setDefaultOptions() {
 
 		chrome.storage.local.set(storageObject);
 	});
+
+	return standardValues;
 }
