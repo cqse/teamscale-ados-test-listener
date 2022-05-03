@@ -4,7 +4,6 @@ const tsServerOptionId = 'ts-server';
 const tsProjectOptionId = 'ts-project';
 const technologyId = 'technology';
 const sapUserOptionId = 'sap-username';
-const dotnetSocketId = 'dotnet-socket';
 const extendedUriFilterOptionId = 'extended-uri-filter';
 const allOptionIds = [tsServerOptionId, tsProjectOptionId, technology, sapUserOptionId, dotnetSocketId, extendedUriFilterOptionId];
 

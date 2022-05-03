@@ -23,17 +23,17 @@ function showTechnologyOptions(){
     var sap = document.getElementById("sap");
     var dotnet = document.getElementById("dotnet");
     var sapInput = document.getElementById("sap-input");
-    var dotnetInput = document.getElementById("dotnet-input")
+    var tsProject = document.getElementById("ts-project-input");
     
     if ( technology.value == 'dotnet')
       {
-        dotnetInput.hidden = false;
         sapInput.hidden = true ;
+        tsProject.hidden = true;
       }     
         else
       {
-        dotnetInput.hidden = true;
         sapInput.hidden = false ;
+        tsProject = false;
      }
 }
 

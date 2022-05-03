@@ -179,7 +179,15 @@ function testRunUpdateCallListener(details, tabId, tab) {
 		action = tsTiaApiActions.pause;
 	}
 
-	queryTeamscale(action, details.tabId, testNameWithParameter, testOutcomeToTeamscaleTestExecutionResult(updatedIterationActionResult.outcome));
+	if(configOptions[technologyId] === technologies.dotnet ){
+		queryProfiler(action, details.tabId, testNameWithParameter, testOutcomeToTeamscaleTestExecutionResult(updatedIterationActionResult.outcome));
+	} else if (configOptions[technologyId] === technologies.sap ){
+		queryTeamscale(action, details.tabId, testNameWithParameter, testOutcomeToTeamscaleTestExecutionResult(updatedIterationActionResult.outcome));
+	} else {
+		throw 'Configured technology invalid. (' + technologyId + '=' + configOptions[technologyId] + ')'; 
+	}
+
+	
 }
 
 /**
@@ -225,28 +233,41 @@ function getParameterDefinitionsPerIteration(updateRequest) {
 	return parametersPerIteration;
 }
 
+function queryProfiler(action, tabId, extendedName, status, sapTestKey) {
+	if (action !== tsTiaApiActions.reset && action !== tsTiaApiActions.log && (!tabId || !testCaseIdByTab[tabId])) {
+		throw 'Could not obtain testId from tabId "' + tabId + '".';
+	}
+
+	if (!configOptions[tsServerOptionId]) {
+		throw 'Not all extension configuration entries are set. (' +
+		tsServerOptionId + '=' + configOptions[tsServerOptionId] + ')';
+	}
+
+	const testId = testCaseIdByTab[tabId];
+
+	if (action === tsTiaApiActions.update && (!extendedName || !status)) {
+		throw 'Need test name and status for updating Test Run.';
+	}
+
+	const request = constructProfilerRequest(action, status, extendedName, tabId, sapTestKey, testId);
+	request.setRequestHeader('X-Requested-By', teamscaleSession);
+
+	request.onreadystatechange = () => handleResponse(request, action);
+	var result = {"result":status};
+	request.send(JSON.stringify(result));
+}
+
 function queryTeamscale(action, tabId, extendedName, status, sapTestKey) {
 	if (action !== tsTiaApiActions.reset && action !== tsTiaApiActions.log && (!tabId || !testCaseIdByTab[tabId])) {
 		throw 'Could not obtain testId from tabId "' + tabId + '".';
 	}
 
-	if(configOptions[technologyId] === technologies.dotnet ){
-		if (!configOptions[tsServerOptionId] || !configOptions[tsProjectOptionId] || !configOptions[dotnetSocketId]) {
-			throw 'Not all extension configuration entries are set. (' +
-			tsServerOptionId + '=' + configOptions[tsServerOptionId] + ', ' +
-			tsProjectOptionId + '=' + configOptions[tsProjectOptionId] + ', ' +
-			dotnetSocketId + '=' + configOptions[dotnetSocketId] + ')';
-		}
-	} else if (configOptions[technologyId] === technologies.sap ){
-		if (!configOptions[tsServerOptionId] || !configOptions[tsProjectOptionId] || !configOptions[sapUserOptionId]) {
-			throw 'Not all extension configuration entries are set. (' +
-			tsServerOptionId + '=' + configOptions[tsServerOptionId] + ', ' +
-			tsProjectOptionId + '=' + configOptions[tsProjectOptionId] + ', ' +
-			sapUserOptionId + '=' + configOptions[sapUserOptionId] + ')';
-		}
-	} else {
-		throw 'Configured technology invalid. (' + technologyId + '=' + configOptions[technologyId] + ')';
-	}
+	if (!configOptions[tsServerOptionId] || !configOptions[tsProjectOptionId] || !configOptions[sapUserOptionId]) {
+		throw 'Not all extension configuration entries are set. (' +
+		tsServerOptionId + '=' + configOptions[tsServerOptionId] + ', ' +
+		tsProjectOptionId + '=' + configOptions[tsProjectOptionId] + ', ' +
+		sapUserOptionId + '=' + configOptions[sapUserOptionId] + ')';
+	} 
 
 	const testId = testCaseIdByTab[tabId];
 
@@ -257,8 +278,42 @@ function queryTeamscale(action, tabId, extendedName, status, sapTestKey) {
 	const request = constructTeamscaleRequest(action, status, extendedName, tabId, sapTestKey, testId);
 	request.setRequestHeader('X-Requested-By', teamscaleSession);
 
-	request.onreadystatechange = () => handleTeamscaleResponse(request, action);
+	request.onreadystatechange = () => handleResponse(request, action);
 	request.send();
+}
+
+function constructProfilerRequest(action, status, extendedName, tabId, testKey, testId) {
+	const request = new XMLHttpRequest();
+
+	// currently unused as update is not supported, yet 
+	let additionalParameter = '';
+	if (action === tsTiaApiActions.update) {
+		additionalParameter = '&result=' + status + "&extended-name=" + encodeURI(extendedName);
+	}
+
+	const teamscaleUrl = assertStringEndsWith(configOptions[tsServerOptionId], '/');
+
+	const testOutput = 'Follow this link to view test run in Azure DevOps:\n' + adosTestRunUrlByTab[tabId];
+
+	let url;
+	let httpVerb = 'POST';
+	
+	const serviceUrl = teamscaleUrl + 'test/';
+
+	if (action === tsTiaApiActions.reset) {
+		throw tsTiaApiActions.reset + ' action not supported, yet, for .NET.'
+	} else if (action === tsTiaApiActions.log) {
+		tsTiaApiActions.log + ' action not supported, yet, for .NET.'
+	} else if (action === tsTiaApiActions.stop) {
+		// using "end" legacy end point to support the Java proiler use-case, too.
+		url = serviceUrl + 'end' + '/' + testId;
+	} 
+	else {
+		url = serviceUrl + action + '/' + testId ;
+	}
+
+	request.open(httpVerb, url, true);
+	return request;
 }
 
 function constructTeamscaleRequest(action, status, extendedName, tabId, sapTestKey, testId) {
@@ -275,43 +330,24 @@ function constructTeamscaleRequest(action, status, extendedName, tabId, sapTestK
 
 	let url;
 	let httpVerb = 'POST';
+	
 	// TODO Will the service be renamed to something like "manual-test-event"?
 	const serviceUrl = teamscaleUrl + 'api/projects/' + configOptions[tsProjectOptionId] + '/sap-test-event/';
-
-	if(configOptions[technologyId] === technologies.dotnet ){
-		// .NET
-		if (action === tsTiaApiActions.reset) {
-			// TODO check API format
-			url = serviceUrl + action + '/' + encodeURIComponent(configOptions[dotnetSocketId]);
-		} else if (action === tsTiaApiActions.log) {
-			// TODO Will we have some kind of log mechanism for .NET?
-			httpVerb = 'GET';
-			// TODO check API format
-			url = serviceUrl + action + '/' + encodeURIComponent(sapTestKey);
-		} else {
-			// TODO check API format
-			url = serviceUrl + action + '?test-id=' + testId + '&message=' + encodeURIComponent(testOutput) + '&dotnet-socket-id=' + encodeURIComponent(configOptions[dotnetSocketId]) + additionalParameter;
-		}
-	} else if (configOptions[technologyId] === technologies.sap ){
-		if (action === tsTiaApiActions.reset) {
-			url = serviceUrl + action + '/' + encodeURIComponent(configOptions[sapUserOptionId]);
-		} else if (action === tsTiaApiActions.log) {
-			httpVerb = 'GET';
-			url = serviceUrl + action + '/' + encodeURIComponent(sapTestKey);
-		} else {
-			url = serviceUrl + action + '?test-id=' + testId + '&message=' + encodeURIComponent(testOutput) + '&sap-user-name=' + encodeURIComponent(configOptions[sapUserOptionId]) + additionalParameter;
-		}
-	} else {
-		throw 'Configured technology invalid. (' + technologyId + '=' + configOptions[technologyId] + ')'; 
-	}
-
 	
+	if (action === tsTiaApiActions.reset) {
+		url = serviceUrl + action + '/' + encodeURIComponent(configOptions[sapUserOptionId]);
+	} else if (action === tsTiaApiActions.log) {
+		httpVerb = 'GET';
+		url = serviceUrl + action + '/' + encodeURIComponent(sapTestKey);
+	} else {
+		url = serviceUrl + action + '?test-id=' + testId + '&message=' + encodeURIComponent(testOutput) + '&sap-user-name=' + encodeURIComponent(configOptions[sapUserOptionId]) + additionalParameter;
+	}
 
 	request.open(httpVerb, url, true);
 	return request;
 }
 
-function handleTeamscaleResponse(request, action) {
+function handleResponse(request, action) {
 	if (request.readyState !== 4) {
 		return;
 	}
@@ -496,7 +532,6 @@ function setDefaultOptions() {
 	standardValues[tsProjectOptionId] = 'project';
 	standardValues[technology] = technologies.dotnet;
 	standardValues[sapUserOptionId] = 'SAP_Sample_User';
-	standardValues[dotnetSocketId] = '192.168.0.1:5555';
 	standardValues[extendedUriFilterOptionId] = '';
 
 	allOptionIds.forEach(optionIds => {
