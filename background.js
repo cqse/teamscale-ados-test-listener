@@ -43,13 +43,17 @@ chrome.runtime.onMessage.addListener(
 			sendLogMessagesToPopup();
 		}
 
-		if (request.data.request === internalRequestKinds.resetUser) {
-			queryTeamscale(tsTiaApiActions.reset);
+		if(configOptions[technologyId] === technologies.sap ){
+			if (request.data.request === internalRequestKinds.resetUser) {
+				queryTeamscale(tsTiaApiActions.reset);
+			}
+		
+			if (request.data.request === internalRequestKinds.getLog) {
+				queryTeamscale(tsTiaApiActions.log, null, null, null, request.data.sapTestKey);
+			}
 		}
 
-		if (request.data.request === internalRequestKinds.getLog) {
-			queryTeamscale(tsTiaApiActions.log, null, null, null, request.data.sapTestKey);
-		}
+		
 	}
 );
 
@@ -80,13 +84,19 @@ chrome.tabs.onRemoved.addListener(tabId => {
 	if (listeners[tabId]) {
 		chrome.webRequest.onBeforeRequest.removeListener(listeners[tabId]);
 		delete listeners[tabId];
-		queryTeamscale(tsTiaApiActions.stop, tabId);
+		if(configOptions[technologyId] === technologies.dotnet ){
+			queryProfiler(tsTiaApiActions.stop, tabId);
+		} else {
+			queryTeamscale(tsTiaApiActions.stop, tabId);
+		}
 	}
 });
 
 function registerInitialListeners(tabId) {
 	fetchStoredConfiguration();
-	cacheTeamscaleSessionCookie();
+	if(configOptions[technologyId] === technologies.sap ){
+		cacheTeamscaleSessionCookie();
+	}
 
 	adosSessionIdResolvingListener[tabId] = details => resolveAzureDevOpsSessionIdListener(details, tabId);
 	onTestStartListeners[tabId] = details => onStartListener(details, tabId);
@@ -180,6 +190,11 @@ function testRunUpdateCallListener(details, tabId, tab) {
 	}
 
 	if(configOptions[technologyId] === technologies.dotnet ){
+		// HACK
+		if(action == tsTiaApiActions.pause){
+			action = tsTiaApiActions.stop;
+		}
+		
 		queryProfiler(action, details.tabId, testNameWithParameter, testOutcomeToTeamscaleTestExecutionResult(updatedIterationActionResult.outcome));
 	} else if (configOptions[technologyId] === technologies.sap ){
 		queryTeamscale(action, details.tabId, testNameWithParameter, testOutcomeToTeamscaleTestExecutionResult(updatedIterationActionResult.outcome));
@@ -250,7 +265,6 @@ function queryProfiler(action, tabId, extendedName, status, sapTestKey) {
 	}
 
 	const request = constructProfilerRequest(action, status, extendedName, tabId, sapTestKey, testId);
-	request.setRequestHeader('X-Requested-By', teamscaleSession);
 
 	request.onreadystatechange = () => handleResponse(request, action);
 	var result = {"result":status};
@@ -313,6 +327,8 @@ function constructProfilerRequest(action, status, extendedName, tabId, testKey, 
 	}
 
 	request.open(httpVerb, url, true);
+	request.setRequestHeader("Content-Type", "application/json");
+	
 	return request;
 }
 
@@ -331,7 +347,6 @@ function constructTeamscaleRequest(action, status, extendedName, tabId, sapTestK
 	let url;
 	let httpVerb = 'POST';
 	
-	// TODO Will the service be renamed to something like "manual-test-event"?
 	const serviceUrl = teamscaleUrl + 'api/projects/' + configOptions[tsProjectOptionId] + '/sap-test-event/';
 	
 	if (action === tsTiaApiActions.reset) {
@@ -424,8 +439,15 @@ function resolveUserNameOfTesterAndTriggerRecordingStart(apiUrl, tabId) {
 		if (request.status === httpOkStatus) {
 			const userInfo = JSON.parse(request.responseText);
 			userByAdosSession[adosSessionByTab[tabId]] = userInfo.identity.AccountName;
-
-			queryTeamscale(tsTiaApiActions.start, tabId);
+			
+			if(configOptions[technologyId] === technologies.dotnet ){
+				queryProfiler(tsTiaApiActions.start, tabId);
+			} else if (configOptions[technologyId] === technologies.sap ){
+				queryTeamscale(tsTiaApiActions.start, tabId);
+			} else {
+				throw 'Configured technology invalid. (technologyId=' + configOptions[technologyId] + ')'; 
+			}
+			
 		} else {
 			throw 'Could not obtain username.';
 		}
@@ -530,7 +552,7 @@ function setDefaultOptions() {
 	const standardValues = {};
 	standardValues[tsServerOptionId] = 'https://teamscale.example.org/';
 	standardValues[tsProjectOptionId] = 'project';
-	standardValues[technology] = technologies.dotnet;
+	standardValues[technologyId] = technologies.dotnet;
 	standardValues[sapUserOptionId] = 'SAP_Sample_User';
 	standardValues[extendedUriFilterOptionId] = '';
 

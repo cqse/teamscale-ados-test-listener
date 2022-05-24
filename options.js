@@ -20,8 +20,6 @@ function saveChanges(inputElement) {
 
 function showTechnologyOptions(){
     var technology = document.getElementById("technology");
-    var sap = document.getElementById("sap");
-    var dotnet = document.getElementById("dotnet");
     var sapInput = document.getElementById("sap-input");
     var tsProject = document.getElementById("ts-project-input");
     

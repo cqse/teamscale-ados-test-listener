@@ -5,7 +5,7 @@ const tsProjectOptionId = 'ts-project';
 const technologyId = 'technology';
 const sapUserOptionId = 'sap-username';
 const extendedUriFilterOptionId = 'extended-uri-filter';
-const allOptionIds = [tsServerOptionId, tsProjectOptionId, technology, sapUserOptionId, dotnetSocketId, extendedUriFilterOptionId];
+const allOptionIds = [tsServerOptionId, tsProjectOptionId, technologyId, sapUserOptionId, extendedUriFilterOptionId];
 
 const tsSapCallFinishedMsg = 'call finished';
 
@@ -27,6 +27,6 @@ const tsTiaApiActions = {
 };
 
 const technologies = {
-	dotnet: '.NET',
+	dotnet: 'dotnet',
 	sap: 'SAP'
 };
