@@ -253,9 +253,9 @@ function queryProfiler(action, tabId, extendedName, status, sapTestKey) {
 		throw 'Could not obtain testId from tabId "' + tabId + '".';
 	}
 
-	if (!configOptions[tsServerOptionId]) {
+	if (!configOptions[serverOptionId]) {
 		throw 'Not all extension configuration entries are set. (' +
-		tsServerOptionId + '=' + configOptions[tsServerOptionId] + ')';
+		serverOptionId + '=' + configOptions[serverOptionId] + ')';
 	}
 
 	const testId = testCaseIdByTab[tabId];
@@ -276,9 +276,9 @@ function queryTeamscale(action, tabId, extendedName, status, sapTestKey) {
 		throw 'Could not obtain testId from tabId "' + tabId + '".';
 	}
 
-	if (!configOptions[tsServerOptionId] || !configOptions[tsProjectOptionId] || !configOptions[sapUserOptionId]) {
+	if (!configOptions[serverOptionId] || !configOptions[tsProjectOptionId] || !configOptions[sapUserOptionId]) {
 		throw 'Not all extension configuration entries are set. (' +
-		tsServerOptionId + '=' + configOptions[tsServerOptionId] + ', ' +
+		serverOptionId + '=' + configOptions[serverOptionId] + ', ' +
 		tsProjectOptionId + '=' + configOptions[tsProjectOptionId] + ', ' +
 		sapUserOptionId + '=' + configOptions[sapUserOptionId] + ')';
 	} 
@@ -305,7 +305,7 @@ function constructProfilerRequest(action, status, extendedName, tabId, testKey, 
 		additionalParameter = '&result=' + status + "&extended-name=" + encodeURI(extendedName);
 	}
 
-	const teamscaleUrl = assertStringEndsWith(configOptions[tsServerOptionId], '/');
+	const teamscaleUrl = assertStringEndsWith(configOptions[serverOptionId], '/');
 
 	const testOutput = 'Follow this link to view test run in Azure DevOps:\n' + adosTestRunUrlByTab[tabId];
 
@@ -340,7 +340,7 @@ function constructTeamscaleRequest(action, status, extendedName, tabId, sapTestK
 		additionalParameter = '&result=' + status + "&extended-name=" + encodeURI(extendedName);
 	}
 
-	const teamscaleUrl = assertStringEndsWith(configOptions[tsServerOptionId], '/');
+	const teamscaleUrl = assertStringEndsWith(configOptions[serverOptionId], '/');
 
 	const testOutput = 'Follow this link to view test run in Azure DevOps:\n' + adosTestRunUrlByTab[tabId];
 
@@ -486,7 +486,7 @@ function assertStringEndsWith(text, suffix) {
 }
 
 function cacheTeamscaleSessionCookie() {
-	const teamscaleServer = new URL(configOptions[tsServerOptionId]);
+	const teamscaleServer = new URL(configOptions[serverOptionId]);
 	const setTeamscaleSessionCallback = function (cookieArray) {
 		for (const cookie of cookieArray) {
 			if (!(cookie.name.includes('teamscale-session'))){
@@ -553,9 +553,9 @@ function isTestRunnerApiCall(details) {
 
 function setDefaultOptions() {
 	const standardValues = {};
-	standardValues[tsServerOptionId] = 'https://teamscale.example.org/';
+	standardValues[serverOptionId] = 'https://teamscale.example.org/';
 	standardValues[tsProjectOptionId] = 'project';
-	standardValues[technologyId] = technologies.dotnet;
+	standardValues[technologyId] = technologies.sap;
 	standardValues[sapUserOptionId] = 'SAP_Sample_User';
 	standardValues[extendedUriFilterOptionId] = '';
 
