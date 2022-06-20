@@ -301,7 +301,6 @@ function queryTeamscale(action, tabId, extendedName, status, sapTestKey) {
 function constructProfilerRequest(action, status, extendedName, tabId, testKey, testId) {
 	const request = new XMLHttpRequest();
 
-	// HACK currently unused as update is not supported, yet 
 	let additionalParameter = '';
 	if (action === tsTiaApiActions.update) {
 		additionalParameter = '&result=' + status + "&extended-name=" + encodeURI(extendedName);
