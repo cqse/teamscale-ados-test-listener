@@ -267,6 +267,7 @@ function queryProfiler(action, tabId, extendedName, status, sapTestKey) {
 	const request = constructProfilerRequest(action, status, extendedName, tabId, sapTestKey, testId);
 
 	request.onreadystatechange = () => handleResponse(request, action);
+	request.onerror = () => handleError(request);
 	var result = {"result":status};
 	request.send(JSON.stringify(result));
 }
@@ -293,13 +294,14 @@ function queryTeamscale(action, tabId, extendedName, status, sapTestKey) {
 	request.setRequestHeader('X-Requested-By', teamscaleSession);
 
 	request.onreadystatechange = () => handleResponse(request, action);
+	request.onerror = () => handleError(request);
 	request.send();
 }
 
 function constructProfilerRequest(action, status, extendedName, tabId, testKey, testId) {
 	const request = new XMLHttpRequest();
 
-	// currently unused as update is not supported, yet 
+	// HACK currently unused as update is not supported, yet 
 	let additionalParameter = '';
 	if (action === tsTiaApiActions.update) {
 		additionalParameter = '&result=' + status + "&extended-name=" + encodeURI(extendedName);
@@ -317,7 +319,7 @@ function constructProfilerRequest(action, status, extendedName, tabId, testKey, 
 	if (action === tsTiaApiActions.reset) {
 		throw tsTiaApiActions.reset + ' action not supported, yet, for .NET.'
 	} else if (action === tsTiaApiActions.log) {
-		tsTiaApiActions.log + ' action not supported, yet, for .NET.'
+		throw tsTiaApiActions.log + ' action not supported, yet, for .NET.'
 	} else if (action === tsTiaApiActions.stop) {
 		// using "end" legacy end point to support the Java proiler use-case, too.
 		url = serviceUrl + 'end' + '/' + testId;
@@ -377,6 +379,21 @@ function handleResponse(request, action) {
 	};
 
 	persistAndBroadcastSingleEvent(event);
+}
+
+function handleError(request){
+	const actionString = '🛑 Connection Refused';
+	const text = 'Connecting to ' + configOptions[serverOptionId] + 'failed. Is the server running?';
+	const event = {
+		action: actionString,
+		status: request.status,
+		date: new Date().toLocaleString(),
+		text: text
+	};
+
+	persistAndBroadcastSingleEvent(event);
+
+	throw 'Connecting to ' + configOptions[serverOptionId] + 'failed. Is the server running?'
 }
 
 function resolveActionCaption(action) {
