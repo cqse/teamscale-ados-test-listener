@@ -41,6 +41,7 @@ function showTechnologyOptions(){
      }
 }
 
+document.getElementById("technology").addEventListener("load", showTechnologyOptions);
 document.getElementById("technology").addEventListener("change", showTechnologyOptions);
 
 loadDataAndListen();
