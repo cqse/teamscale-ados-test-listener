@@ -7,6 +7,7 @@ function loadDataAndListen() {
             optionInput.value = result[optionId];
             optionInput.addEventListener('input', saveChanges);
         });
+        showTechnologyOptions();
     });
 }
 
@@ -41,7 +42,6 @@ function showTechnologyOptions(){
      }
 }
 
-document.getElementById("technology").addEventListener("load", showTechnologyOptions);
 document.getElementById("technology").addEventListener("change", showTechnologyOptions);
 
 loadDataAndListen();
