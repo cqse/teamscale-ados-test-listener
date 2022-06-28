@@ -1,5 +1,11 @@
 'use strict';
 
+const technologyElement = document.getElementById("technology");
+const sapInputElement = document.getElementById("sap-input");
+const tsProjectElement = document.getElementById("ts-project-input");
+const tsServerDescriptionElement = document.getElementById("ts-server-description");
+const webServerDescriptionElement = document.getElementById("web-server-description");
+
 function loadDataAndListen() {
     chrome.storage.local.get(allOptionIds, result => {
         allOptionIds.forEach(optionId => {
@@ -19,29 +25,21 @@ function saveChanges(inputElement) {
     chrome.storage.local.set(storageObject);
 }
 
-function showTechnologyOptions(){
-    var technology = document.getElementById("technology");
-    var sapInput = document.getElementById("sap-input");
-    var tsProject = document.getElementById("ts-project-input");
-    var tsServerDescription = document.getElementById("ts-server-description");
-    var webServerDescription = document.getElementById("web-server-description");
+function showTechnologyOptions() {
 
-    if ( technology.value == 'dotnet')
-      {
-        sapInput.hidden = true ;
-        tsProject.hidden = true;
-        tsServerDescription.hidden = true;
-        webServerDescription.hidden = false;
-      }     
-        else
-      {
-        sapInput.hidden = false ;
-        tsProject.hidden = false;
-        tsServerDescription.hidden = false;
-        webServerDescription.hidden = true;
-     }
+    if (technologyElement.value == 'dotnet') {
+        sapInputElement.hidden = true;
+        tsProjectElement.hidden = true;
+        tsServerDescriptionElement.hidden = true;
+        webServerDescriptionElement.hidden = false;
+    } else {
+        sapInputElement.hidden = false;
+        tsProjectElement.hidden = false;
+        tsServerDescriptionElement.hidden = false;
+        webServerDescriptionElement.hidden = true;
+    }
 }
 
-document.getElementById("technology").addEventListener("change", showTechnologyOptions);
+technologyElement.addEventListener("change", showTechnologyOptions);
 
 loadDataAndListen();

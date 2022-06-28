@@ -12,21 +12,21 @@ const tsSapCallFinishedMsg = 'call finished';
 const httpOkStatus = 200;
 
 const internalRequestKinds = {
-	sendLogs: 'send logs',
-	getLog: 'get log',
-	resetUser: 'reset user'
+    sendLogs: 'send logs',
+    getLog: 'get log',
+    resetUser: 'reset user'
 };
 
 const tsTiaApiActions = {
-	start: 'start',
-	stop: 'stop',
-	pause: 'pause',
-	update: 'update',
-	log: 'log',
-	reset: 'reset'
+    start: 'start',
+    stop: 'stop',
+    pause: 'pause',
+    update: 'update',
+    log: 'log',
+    reset: 'reset'
 };
 
 const technologies = {
-	dotnet: 'dotnet',
-	sap: 'SAP'
+    dotnet: 'dotnet',
+    sap: 'SAP'
 };
