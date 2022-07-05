@@ -249,12 +249,7 @@ function getParameterDefinitionsPerIteration(updateRequest) {
 }
 
 function queryProfiler(action, tabId, extendedName, status, sapTestKey) {
-    validateTestId(action, tabId);
-
-    if (!configOptions[serverOptionId]) {
-        throw 'Not all extension configuration entries are set. (' +
-        serverOptionId + '=' + configOptions[serverOptionId] + ')';
-    }
+    validateTestAndServerOptionId(action, tabId);
 
     const testId = testCaseIdByTab[tabId];
 
@@ -271,11 +266,10 @@ function queryProfiler(action, tabId, extendedName, status, sapTestKey) {
 }
 
 function queryTeamscale(action, tabId, extendedName, status, sapTestKey) {
-    validateTestId(action, tabId);
+    validateTestAndServerOptionId(action, tabId);
 
-    if (!configOptions[serverOptionId] || !configOptions[tsProjectOptionId] || !configOptions[sapUserOptionId]) {
+    if (!configOptions[tsProjectOptionId] || !configOptions[sapUserOptionId]) {
         throw 'Not all extension configuration entries are set. (' +
-        serverOptionId + '=' + configOptions[serverOptionId] + ', ' +
         tsProjectOptionId + '=' + configOptions[tsProjectOptionId] + ', ' +
         sapUserOptionId + '=' + configOptions[sapUserOptionId] + ')';
     }
@@ -294,9 +288,13 @@ function queryTeamscale(action, tabId, extendedName, status, sapTestKey) {
     request.send();
 }
 
-function validateTestId(action, tabId) {
+function validateTestAndServerOptionId(action, tabId) {
     if (action !== tsTiaApiActions.reset && action !== tsTiaApiActions.log && (!tabId || !testCaseIdByTab[tabId])) {
         throw 'Could not obtain testId from tabId "' + tabId + '".';
+    }
+
+    if (!configOptions[serverOptionId] || !configOptions[tsProjectOptionId] || !configOptions[sapUserOptionId]) {
+        throw  'Server option id is not set (' + serverOptionId + '=' + configOptions[serverOptionId] +')'
     }
 }
 
@@ -309,8 +307,6 @@ function constructProfilerRequest(action, status, extendedName, tabId, testKey, 
     }
 
     const teamscaleUrl = assertStringEndsWith(configOptions[serverOptionId], '/');
-
-    const testOutput = 'Follow this link to view test run in Azure DevOps:\n' + adosTestRunUrlByTab[tabId];
 
     let url;
     let httpVerb = 'POST';
@@ -325,7 +321,7 @@ function constructProfilerRequest(action, status, extendedName, tabId, testKey, 
         // using "end" legacy end point to support the Java proiler use-case, too.
         url = serviceUrl + 'end' + '/' + testId;
     } else {
-        url = serviceUrl + action + '/' + testId;
+        url = serviceUrl + action + '/' + testId + additionalParameter;
     }
 
     request.open(httpVerb, url, true);
