@@ -1,11 +1,12 @@
 'use strict';
 
-const serverOptionId = 'server';
+const tsServerOptionId = 'ts-server';
+const webServerOptionId = 'web-server';
 const tsProjectOptionId = 'ts-project';
 const technologyId = 'technology';
 const sapUserOptionId = 'sap-username';
 const extendedUriFilterOptionId = 'extended-uri-filter';
-const allOptionIds = [serverOptionId, tsProjectOptionId, technologyId, sapUserOptionId, extendedUriFilterOptionId];
+const allOptionIds = [tsServerOptionId, webServerOptionId, tsProjectOptionId, technologyId, sapUserOptionId, extendedUriFilterOptionId];
 
 const tsSapCallFinishedMsg = 'call finished';
 

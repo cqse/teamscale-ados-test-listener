@@ -249,7 +249,12 @@ function getParameterDefinitionsPerIteration(updateRequest) {
 }
 
 function queryProfiler(action, tabId, extendedName, status, sapTestKey) {
-    validateTestAndServerOptionId(action, tabId);
+    validateTestId(action, tabId);
+
+    if (!configOptions[webServerOptionId]) {
+        throw 'Not all extension configuration entries are set. (' +
+        webServerOptionId + '=' + configOptions[webServerOptionId] + ')';
+    }
 
     const testId = testCaseIdByTab[tabId];
 
@@ -266,10 +271,11 @@ function queryProfiler(action, tabId, extendedName, status, sapTestKey) {
 }
 
 function queryTeamscale(action, tabId, extendedName, status, sapTestKey) {
-    validateTestAndServerOptionId(action, tabId);
+    validateTestId(action, tabId);
 
-    if (!configOptions[tsProjectOptionId] || !configOptions[sapUserOptionId]) {
+    if (!configOptions[tsServerOptionId] || !configOptions[tsProjectOptionId] || !configOptions[sapUserOptionId]) {
         throw 'Not all extension configuration entries are set. (' +
+        tsServerOptionId + '=' + configOptions[tsServerOptionId] + ', ' +
         tsProjectOptionId + '=' + configOptions[tsProjectOptionId] + ', ' +
         sapUserOptionId + '=' + configOptions[sapUserOptionId] + ')';
     }
@@ -288,13 +294,9 @@ function queryTeamscale(action, tabId, extendedName, status, sapTestKey) {
     request.send();
 }
 
-function validateTestAndServerOptionId(action, tabId) {
+function validateTestId(action, tabId) {
     if (action !== tsTiaApiActions.reset && action !== tsTiaApiActions.log && (!tabId || !testCaseIdByTab[tabId])) {
         throw 'Could not obtain testId from tabId "' + tabId + '".';
-    }
-
-    if (!configOptions[serverOptionId]) {
-        throw  'Server option id is not set (' + serverOptionId + '=' + configOptions[serverOptionId] +')'
     }
 }
 
@@ -306,19 +308,20 @@ function constructProfilerRequest(action, status, extendedName, tabId, testKey, 
         additionalParameter = '&result=' + status + "&extended-name=" + encodeURI(extendedName);
     }
 
-    const teamscaleUrl = assertStringEndsWith(configOptions[serverOptionId], '/');
+    const profilerUrl = assertStringEndsWith(configOptions[webServerOptionId], '/');
 
     let url;
     let httpVerb = 'POST';
 
-    const serviceUrl = teamscaleUrl + 'test/';
+    const serviceUrl = profilerUrl + 'test/';
 
     if (action === tsTiaApiActions.reset) {
-        throw tsTiaApiActions.reset + ' action not supported, yet, for .NET.'
+        throw tsTiaApiActions.reset + ' action for .NET not supported, yet.'
     } else if (action === tsTiaApiActions.log) {
-        throw tsTiaApiActions.log + ' action not supported, yet, for .NET.'
+        throw tsTiaApiActions.log + ' action for .NET not supported, yet.'
     } else if (action === tsTiaApiActions.stop) {
-        // using "end" legacy end point to support the Java proiler use-case, too.
+        // using "end" legacy end point to support the Teamscale JaCoCo profiler use-case, too.
+        // The .NET profiler would also support a "stop" event, which essentially does the same.
         url = serviceUrl + 'end' + '/' + testId;
     } else {
         url = serviceUrl + action + '/' + testId + additionalParameter;
@@ -338,7 +341,7 @@ function constructTeamscaleRequest(action, status, extendedName, tabId, sapTestK
         additionalParameter = '&result=' + status + "&extended-name=" + encodeURI(extendedName);
     }
 
-    const teamscaleUrl = assertStringEndsWith(configOptions[serverOptionId], '/');
+    const teamscaleUrl = assertStringEndsWith(configOptions[tsServerOptionId], '/');
 
     const testOutput = 'Follow this link to view test run in Azure DevOps:\n' + adosTestRunUrlByTab[tabId];
 
@@ -378,8 +381,15 @@ function handleResponse(request, action) {
 }
 
 function handleError(request) {
-    const actionString = '🛑 Connection Refused';
-    const text = 'Connecting to ' + configOptions[serverOptionId] + ' failed. Is the server running and reachable?';
+    const actionString = '🛑 Connecting to server failed.';
+    let server;
+    if(configOptions[technologyId] === technologies.dotnet){
+        server = configOptions[webServerOptionId];
+    } else {
+        server = configOptions[tsServerOptionId];
+    }
+
+    const text = 'Request to server ' + server + ' encountered an error. Is the server running and reachable?';
     const event = {
         action: actionString,
         status: request.status,
@@ -508,7 +518,7 @@ function assertStringEndsWith(text, suffix) {
 }
 
 function cacheTeamscaleSessionCookie() {
-    const teamscaleServer = new URL(configOptions[serverOptionId]);
+    const teamscaleServer = new URL(configOptions[tsServerOptionId]);
     const setTeamscaleSessionCallback = function (cookieArray) {
         for (const cookie of cookieArray) {
             if (!(cookie.name.includes('teamscale-session'))) {
@@ -575,7 +585,8 @@ function isTestRunnerApiCall(details) {
 
 function setDefaultOptions() {
     const standardValues = {};
-    standardValues[serverOptionId] = 'https://teamscale.example.org/';
+    standardValues[tsServerOptionId] = 'https://teamscale.example.org/';
+    standardValues[webServerOptionId] = 'localhost:5000/';
     standardValues[tsProjectOptionId] = 'project';
     standardValues[technologyId] = technologies.sap;
     standardValues[sapUserOptionId] = 'SAP_Sample_User';
