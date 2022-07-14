@@ -29,5 +29,5 @@ const tsTiaApiActions = {
 
 const technologies = {
     dotnet: 'dotnet',
-    sap: 'SAP'
+    sap: 'sap'
 };
