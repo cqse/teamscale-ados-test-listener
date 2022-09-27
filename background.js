@@ -305,7 +305,7 @@ function constructProfilerRequest(action, status, extendedName, tabId, testKey, 
 
     let additionalParameter = '';
     if (action === tsTiaApiActions.update) {
-        additionalParameter = '&result=' + status + "&extended-name=" + encodeURI(extendedName);
+        additionalParameter = '?result=' + status + "&extended-name=" + encodeURI(extendedName);
     }
 
     const profilerUrl = assertStringEndsWith(configOptions[webServerOptionId], '/');
