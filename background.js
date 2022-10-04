@@ -11,6 +11,8 @@ let listeners = [];
 let adosTestRunUrlByTab = {};
 /* Map Chrome Tab Id to: Test Case Id (not Test Run) as identified in Azure DevOps. */
 let testCaseIdByTab = {};
+/* Map Test Case Ids to their titles */
+let testTitleByTab = {};
 /* Map Test Case Id to: Parameters of the currently executed test run. Parameters are only sent on first update. */
 let testParametersByTestCaseId = {};
 
@@ -31,6 +33,9 @@ let logMessages = [];
 const API_ON_PREMISE_CALL_OPEN_TEST_RUNNER = '/_api/_wit/pageWorkItems?__v=5';
 const API_SERVICES_CALL_OPEN_TEST_RUNNER = '/_apis/Contribution/dataProviders/query';
 const API_CALL_UPDATE_TEST_RUN_SUFFIX = '/_api/_testresult/Update?teamId=&__v=5';
+
+const API_CALL_WORKITEM_SUFFIX_WIT = '/_apis/wit/workitems/';
+const API_CALL_WORKITEM_SUFFIX_VERSION = '?api-version=6.0';
 
 const standardUriFilter = ['https://*.visualstudio.com/*', 'https://dev.azure.com/*'];
 let currentUriFilter = [];
@@ -140,23 +145,58 @@ function onStartListener(details, tabId) {
 
     let workItemId;
     let caughtCall;
+    let urlToFetchTitle;
     const parsedRequest = JSON.parse(String.fromCharCode.apply(null, new Uint8Array(details.requestBody.raw[0].bytes)));
 
     if (details.url.endsWith(API_ON_PREMISE_CALL_OPEN_TEST_RUNNER)) {
         workItemId = parsedRequest.workItemIds;
         caughtCall = API_ON_PREMISE_CALL_OPEN_TEST_RUNNER;
+        urlToFetchTitle = details.url.replace(API_ON_PREMISE_CALL_OPEN_TEST_RUNNER, API_CALL_WORKITEM_SUFFIX_WIT + workItemId + API_CALL_WORKITEM_SUFFIX_VERSION );
     } else {
         workItemId = parsedRequest.context.properties.workItemIds;
         caughtCall = API_SERVICES_CALL_OPEN_TEST_RUNNER;
+        urlToFetchTitle = details.url.replace(API_SERVICES_CALL_OPEN_TEST_RUNNER, API_CALL_WORKITEM_SUFFIX_WIT + workItemId + API_CALL_WORKITEM_SUFFIX_VERSION)
     }
 
-    testCaseIdByTab[tabId] = workItemId;
-
-    const apiCallUserInfoUri = details.url.substring(0, details.url.length - caughtCall.length) + '/_api/_common/GetUserProfile?__v=5';
-    resolveUserNameOfTesterAndTriggerRecordingStart(apiCallUserInfoUri, tabId);
+    requestWorkItemTitle( workItemId, tabId, urlToFetchTitle ).then( function (){
+        const apiCallUserInfoUri = details.url.substring(0, details.url.length - caughtCall.length) + '/_api/_common/GetUserProfile?__v=5';
+        resolveUserNameOfTesterAndTriggerRecordingStart(apiCallUserInfoUri, tabId);
+    });
 
     // self delete this listener
     chrome.webRequest.onBeforeRequest.removeListener(onTestStartListeners[tabId]);
+
+}
+
+function requestWorkItemTitle(workItemId, tabId, urlToFetchTitle) {
+    return new Promise(function (resolve, reject) {
+        const request = new XMLHttpRequest();
+
+        let httpVerb = 'GET';
+        let workItemTitle;
+        // url = 'https://tfs.ilp.de/tfs/ILPTeamCollection/TeamProjects/_apis/wit/workitems/' + workItemId + '?api-version=6.0';
+
+        request.open(httpVerb, urlToFetchTitle, true);
+        request.setRequestHeader("Content-Type", "application/json");
+        request.onload = function() {
+            if (request.status >= 200 && request.status < 300) {
+                let response = JSON.parse(request.response);
+                workItemTitle = response.fields['System.Title'];
+                console.log(workItemTitle);
+                testCaseIdByTab[tabId] = workItemId;
+                testTitleByTab[tabId] = workItemTitle;
+                resolve(request.response);
+            } else {
+                reject({
+                    status: request.status,
+                    statusText: request.statusText
+                });
+            }
+        }
+        request.onerror = () => handleError(request);
+
+        request.send();
+    });
 }
 
 /**
@@ -248,7 +288,7 @@ function getParameterDefinitionsPerIteration(updateRequest) {
     return parametersPerIteration;
 }
 
-function queryProfiler(action, tabId, extendedName, status, sapTestKey) {
+function queryProfiler(action, tabId, extendedName, status) {
     validateTestId(action, tabId);
 
     if (!configOptions[webServerOptionId]) {
@@ -262,7 +302,7 @@ function queryProfiler(action, tabId, extendedName, status, sapTestKey) {
         throw 'Need test name and status for updating Test Run.';
     }
 
-    const request = constructProfilerRequest(action, status, extendedName, tabId, sapTestKey, testId);
+    const request = constructProfilerRequest(action, status, extendedName, tabId, testId);
 
     request.onreadystatechange = () => handleResponse(request, action);
     request.onerror = () => handleError(request);
@@ -296,12 +336,16 @@ function queryTeamscale(action, tabId, extendedName, status, sapTestKey) {
 
 function validateTestId(action, tabId) {
     if (action !== tsTiaApiActions.reset && action !== tsTiaApiActions.log && (!tabId || !testCaseIdByTab[tabId])) {
-        throw 'Could not obtain testId from tabId "' + tabId + '".';
+        // throw 'Could not obtain testId from tabId "' + tabId + '".';
     }
 }
 
-function constructProfilerRequest(action, status, extendedName, tabId, testKey, testId) {
+function constructProfilerRequest(action, status, extendedName, tabId, testId) {
     const request = new XMLHttpRequest();
+
+    // As a temporary workaround, we transmit the Id and Title for .NET to show the test case name in Teamscale.
+    // TODO Use testId instead of idAndTitle
+    let idAndTitle = testCaseIdByTab[tabId]+ ' - ' + testTitleByTab[tabId];
 
     let additionalParameter = '';
     if (action === tsTiaApiActions.update) {
@@ -322,9 +366,9 @@ function constructProfilerRequest(action, status, extendedName, tabId, testKey, 
     } else if (action === tsTiaApiActions.stop) {
         // using "end" legacy end point to support the Teamscale JaCoCo profiler use-case, too.
         // The .NET profiler would also support a "stop" event, which essentially does the same.
-        url = serviceUrl + 'end' + '/' + testId;
+        url = serviceUrl + 'end' + '/' + idAndTitle;
     } else {
-        url = serviceUrl + action + '/' + testId + additionalParameter;
+        url = serviceUrl + action + '/' + idAndTitle + additionalParameter;
     }
 
     request.open(httpVerb, url, true);
