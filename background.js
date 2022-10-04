@@ -134,7 +134,7 @@ function resolveAzureDevOpsSessionIdListener(details, tabId) {
 }
 
 function onStartListener(details, tabId) {
-    if (!isTestRunnerApiCall(details)) {
+    if (testCaseIdByTab[tabId] || !isTestRunnerApiCall(details)) {
         return;
     }
 
